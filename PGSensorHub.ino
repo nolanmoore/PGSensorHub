@@ -3,28 +3,27 @@
 #include <LSM303.h>
 
 // Keypad
-const byte KEYPAD_ROWS = 2;
-const byte KEYPAD_COLS = 8;
+const byte KEYPAD_ROWS = 4;
+const byte KEYPAD_COLS = 6;
 char PGKeys[KEYPAD_ROWS][KEYPAD_COLS] = {
-  {'R','L','D','U','P','S','B','A'},
-  {'0','1','2','3','4','5','6','7'},
-  {'8','9','E','X','.','.','.','.'}
+  {'0','1','2','3','4','X'},
+  {'5','6','7','8','9','E'},
+  {'U','L','D','R','C','.'},
+  {'.','.','S','P','B','A'}
 };
-byte rowPins[KEYPAD_ROWS] = {12, 11, 9}; //, 2}; // purple, green, blue
-// purple, blue, grey, green, yellow, orange, red, white
-// next to labels R3, R2, R1, R4, R5, R6, R7, R8 on board, respectively.
-byte colPins[KEYPAD_COLS] = {8, 20, 10, 7, 6, 5, 4, 3};
+byte rowPins[KEYPAD_ROWS] = {2, 3, 17, 16};
+byte colPins[KEYPAD_COLS] = {5, 6, 7, 8, 11, 12};
 Keypad pgKeypad = Keypad( makeKeymap(PGKeys), rowPins, colPins, KEYPAD_ROWS, KEYPAD_COLS);
 
 // Flex sensors
-int flexPins[2] = {A1, A2};    // select the input pin for the potentiometer
+int flexPins[2] = {A7, A8};    // select the input pin for the potentiometer
 int flexValue[2];  // variable to store the value coming from the sensor
 int flexClosed[2] = {325,325};
 int flexRelaxed[2] = {440, 440};
 int flexOpen[2] = {470, 470};
 int flexState[2] = {0,0};
 
-int ledPin = 13;  // orange wire + black gnd
+int ledPin = 4;  // orange wire + black gnd
 int ledState;
 unsigned long ledTimer;
 
