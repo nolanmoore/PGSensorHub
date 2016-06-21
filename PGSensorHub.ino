@@ -45,6 +45,7 @@ const int posTolerance = 10;              // 1 / posTolerance
 int flexPosTols[4] = {0,0,0,0};           // tolerance of position (defined by posTolerance)
 int flexPosture = 0;                      // 0xXXXXXXXXUUUUTIMR - LSN is important
 boolean reversed[4] = {false, false, false, true};
+boolean closedValuesSet, relaxedValuesSet;
 
 // IMU
 LSM303 compass;
@@ -52,10 +53,13 @@ LSM303 compass;
 // LED
 int ledPin = 4;
 int ledState = HIGH;
+unsigned long blinkSpeed;
 unsigned long ledTimer;
 
 String exportString;
 unsigned long lastTime;
+
+int gloveState;
 
 void setup() {
   pinMode(ledPin, OUTPUT);
@@ -63,7 +67,7 @@ void setup() {
   ledTimer = millis();
 
   Serial1.begin(115200);  // ESP serial
-  Serial.begin(115200);  // ESP serial
+  Serial.begin(115200);  // USB serial
 
   Wire.begin();
   compass.init();
@@ -74,10 +78,11 @@ void setup() {
       flexValueReadings[i][j] = 0;
     }
   }
-  
-  setFlexLimits();
 
   lastTime = millis();
+
+  gloveState = MODE_SETUP;
+  blinkSpeed = BLINK_FAST;
 }
 
 void loop() {
@@ -89,8 +94,30 @@ void loop() {
   char pressed = pgKeypad.getKey();
   if (pressed) {
     lastPressed = pressed;
-    if (pressed == BUTTON_PROGRAM) {
-      setFlexLimits();
+    if (pressed == BUTTON_PROGRAM && gloveState == MODE_NORMAL) {
+      gloveState = MODE_SETUP;
+      blinkSpeed = BLINK_FAST;
+      closedValuesSet = false;
+      relaxedValuesSet = false; 
+    } else if (pressed == 'B' && gloveState == MODE_SETUP) {
+      for (int i = 0; i < 4; i++) {
+        flexRelaxed[i] = flexValue[i];
+      }
+      relaxedValuesSet = true;
+    } else if (pressed == 'A' && gloveState == MODE_SETUP) {
+      for (int i = 0; i < 4; i++) {
+        flexClosed[i] = flexValue[i];
+      }
+      closedValuesSet = true;
+    }
+
+    if (closedValuesSet && relaxedValuesSet) {
+      for (int i = 0; i < 4; i++) {
+        flexPosTols[i] = (flexRelaxed[i] - flexClosed[i]) / posTolerance;
+      }
+      
+      gloveState = MODE_NORMAL;
+      blinkSpeed = BLINK_NORMAL;
     }
   }
 
@@ -99,27 +126,24 @@ void loop() {
     lastTime = nowTime;
 
     // Keypad
-    if (lastPressed != '-') {
+    if (lastPressed != BUTTON_NONE) {
       exportString += lastPressed;
-      lastPressed = '-';
+      lastPressed = BUTTON_NONE;
     } else {
-      exportString += '-';
+      exportString += BUTTON_NONE;
     }
     exportString += ',';
     
     // Flex
     switch (flexPosture) {
-      case 0:   // Relaxed
-        exportString += 'R';
-        break;
       case 11:  // Point
-        exportString += 'P';
+        exportString += POSTURE_POINT;
         break;
       case 15:  // Fist
-        exportString += 'F';
+        exportString += POSTURE_FIST;
         break;
       default:  // Other
-        exportString += 'R';
+        exportString += POSTURE_RELAXED;
         break;
     }
     exportString += ',';
@@ -130,25 +154,28 @@ void loop() {
     snprintf(report, sizeof(report), "%3d,%3d", compass.a.x/40, compass.a.y/40);
     exportString += report;
 
-    Serial1.println(exportString);
     Serial.println(exportString);
+
+    if (gloveState == MODE_NORMAL) {
+      Serial1.println(exportString);
+    }
   }
 
-  if (millis() - ledTimer >= 500) {
+  if (millis() - ledTimer >= blinkSpeed) {
     ledState = !ledState;
     digitalWrite(ledPin, ledState);
     ledTimer = millis();
   }
 }
 
-void badValueBlink() {
-  for (int i = 0; i < 4; i++) {
-    digitalWrite(ledPin, HIGH);
-    delay(250);
-    digitalWrite(ledPin, LOW);
-    delay(250);
-  }
-}
+//void badValueBlink() {
+//  for (int i = 0; i < 4; i++) {
+//    digitalWrite(ledPin, HIGH);
+//    delay(250);
+//    digitalWrite(ledPin, LOW);
+//    delay(250);
+//  }
+//}
 
 void readFlexData() {
   // Get sensor data and average it over last numReadings
@@ -177,47 +204,6 @@ void calcFlexPosture() {
       flexPosture |= 1 << i+8;
     }
   }  
-}
-
-void setFlexLimits() {
-  digitalWrite(ledPin, HIGH);
-  
-  boolean closedValuesSet = false;
-  boolean relaxedValuesSet = false;
-
-  while (!closedValuesSet || !relaxedValuesSet) {
-    readFlexData();
-    char pressed = pgKeypad.getKey();
-    
-    if (pressed) {
-      if (pressed == 'B') {
-        for (int i = 0; i < 4; i++) {
-          flexRelaxed[i] = flexValue[i];
-        }
-        relaxedValuesSet = true;
-      } else if (pressed == 'A') {
-        for (int i = 0; i < 4; i++) {
-          flexClosed[i] = flexValue[i];
-        }
-        closedValuesSet = true;
-      } else if (pressed == 'S') {
-        for (int i = 0; i < 4; i++) {
-          byte hbyte = EEPROM.read(2*i+1);
-          byte lbyte = EEPROM.read(2*i);
-          flexRelaxed[i] = (int)hbyte << 8 + lbyte;
-          hbyte = EEPROM.read(2*i+9);
-          lbyte = EEPROM.read(2*i+8);
-          flexClosed[i] = (int)hbyte << 8 + lbyte;
-        }
-        closedValuesSet = true;
-        relaxedValuesSet = true;
-      }
-    }
-  }
-
-  for (int i = 0; i < 4; i++) {
-    flexPosTols[i] = (flexRelaxed[i] - flexClosed[i]) / posTolerance;
-  }
 }
 
 //int getKeypadNum() {
